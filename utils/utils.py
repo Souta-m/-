@@ -1,12 +1,13 @@
 
 def get_pair_input(tokenizer, sent1, sent2, model_type):
     if 'roberta' in model_type:
-        text = "<s> {} </s></s> {} </s>".format(sent1, sent2)
+        #print('roberta')
+        #text = "<s> {} </s></s> {} </s>".format(sent1, sent2)
+        text = "[CLS] {} [SEP] {} [SEP]".format(sent1,sent2)
     else:
         text = "[CLS] {} [SEP] {} [SEP]".format(sent1,sent2)
 
     tokenized_text = tokenizer.tokenize(text)
-    #print(tokenized_text)
     indexed_tokens = tokenizer.encode(text)[1:-1]
     assert len(tokenized_text) == len(indexed_tokens)
 
@@ -16,7 +17,7 @@ def get_pair_input(tokenizer, sent1, sent2, model_type):
     segments_ids = []
     sep_flag = False
     for i in range(len(indexed_tokens)):
-        if 'roberta' in model_type and tokenized_text[i] == '</s>' and not sep_flag:
+        if 'roberta' in model_type and tokenized_text[i] == '[SEP]' and not sep_flag:
             segments_ids.append(0)
             sep_flag = True
         elif 'bert-' in model_type and tokenized_text[i] == '[SEP]' and not sep_flag:

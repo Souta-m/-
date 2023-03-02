@@ -92,8 +92,8 @@ class NLIDataReader(object):
         s1=[s.replace("\n", '') for s in s1]
         s2=[s.replace("\n", '') for s in s2]
         labels=[l.replace("\n", '') for l in labels]
-        ads1,ads2,adlabels=load_csvdataset('/home/matsui/zemi/データ整形/データ/total.csv')
-        adh,adp,adl=load_jsondataset('/home/matsui/ダウンロード/RTE/train.jsonl')
+        ads1,ads2,adlabels=load_csvdataset('datasets/total.csv')
+        adh,adp,adl=load_jsondataset('datasets/train.jsonl')
         s1+=ads1+adh
         s2+=ads2+adp
         labels+=adlabels+adl

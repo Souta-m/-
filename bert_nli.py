@@ -88,7 +88,8 @@ class BertNLIModel(nn.Module):
             no_prog_bar = True
         else: no_prog_bar = False
         for batch_idx in tqdm(range(0,len(sent_pair_list),bs), disable=no_prog_bar,desc='evaluate'):
-            probs = self.ff(sent_pair_list[batch_idx:batch_idx+bs],checkpoint)[1].data.cpu().numpy()
+            _,probs,attens = self.ff(sent_pair_list[batch_idx:batch_idx+bs],checkpoint)
+            probs=probs.data.cpu().numpy()
             if all_probs is None:
                 all_probs = probs
             else:
@@ -103,7 +104,7 @@ class BertNLIModel(nn.Module):
             else:
                 assert ll==2
                 labels.append('neutral')
-        return labels, all_probs
+        return labels, all_probs,attens
 
 
     def step_bert_encode(self, module, hidden_states, attention_mask=None, head_mask=None):
@@ -126,6 +127,7 @@ class BertNLIModel(nn.Module):
             #all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
+       # print(all_attentions)
         #if module.output_hidden_states:
         #    outputs = outputs + (all_hidden_states,)
         #if module.output_attentions:
@@ -168,6 +170,8 @@ class BertNLIModel(nn.Module):
         pooled_output = modules[2](sequence_output)
 
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        #print(pooled_output)
+        #print(attentions)
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 
@@ -184,11 +188,22 @@ class BertNLIModel(nn.Module):
             types_tensor = types_tensor.to('cuda')
             masks_tensor = masks_tensor.to('cuda')
 
+        checkpoint=False  #ここいじった。デフォルトtrue
         if checkpoint:
             cls_vecs = self.step_checkpoint_bert(input_ids=ids_tensor, token_type_ids=types_tensor, attention_mask=masks_tensor)[1]
+            #tmp= self.step_checkpoint_bert(input_ids=ids_tensor, token_type_ids=types_tensor, attention_mask=masks_tensor)[2]
         else:
             cls_vecs = self.bert(input_ids=ids_tensor, token_type_ids=types_tensor, attention_mask=masks_tensor)[1]
+            tmp=self.bert(input_ids=ids_tensor, token_type_ids=types_tensor, attention_mask=masks_tensor,output_attentions=True)[3] #baseは2,largeは3
 
+        #print(self.bert(input_ids=ids_tensor, token_type_ids=types_tensor, attention_mask=masks_tensor,output_attentions=True)[1])
+        #print(tmp[-1])
+        #print(tmp[-1].size())
+        attention_weight=tmp[-1]
+        all_attens=torch.zeros(attention_weight.size()[2]).to('cuda')
+        for i in range(16): #bert-baseは12,largeは16
+            all_attens += attention_weight[0, i, 0, :] 
+        #print(all_attens)
         logits = self.nli_head(cls_vecs)
         probs = self.sm(logits)
 
@@ -198,7 +213,7 @@ class BertNLIModel(nn.Module):
         # del masks_tensor
         # torch.cuda.empty_cache() # releases all unoccupied cached memory
 
-        return logits, probs
+        return logits, probs,all_attens
 
     def save(self, output_path, config_dic=None, acc=None):
         if acc is None:

@@ -21,7 +21,7 @@ from nltk.tokenize import word_tokenize
 
 from utils.nli_data_reader import NLIDataReader
 from utils.logging_handler import LoggingHandler
-from bert_nli import BertNLIModel
+from bert_nli_copy import BertNLIModel
 from test_trained_model import evaluate
 
 
@@ -89,9 +89,9 @@ def train(model, optimizer, scheduler, train_data, dev_data, batch_size, fp16, c
         # update training rate
         scheduler.step()
 
-        if step_cnt%2000 == 0:
+        if step_cnt%5000 == 0:
             acc = evaluate(model,dev_data,checkpoint,mute=True)
-            logging.info('==> step {} dev acc: {}'.format(step_cnt,acc))
+            print('==> step {} dev acc: {}'.format(step_cnt,acc))
             if acc > best_acc:
                 best_acc = acc
                 best_model_weights = copy.deepcopy(model.cpu().state_dict())
@@ -103,7 +103,7 @@ def train(model, optimizer, scheduler, train_data, dev_data, batch_size, fp16, c
 def parse_args():
     ap = argparse.ArgumentParser("arguments for bert-nli training")
     ap.add_argument('-b','--batch_size',type=int,default=8,help='batch size')
-    ap.add_argument('-ep','--epoch_num',type=int,default=5,help='epoch num')
+    ap.add_argument('-ep','--epoch_num',type=int,default=3,help='epoch num')
     ap.add_argument('--fp16',type=int,default=0,help='use apex mixed precision training (1) or not (0); do not use this together with checkpoint')
     ap.add_argument('--check_point','-cp',type=int,default=0,help='use checkpoint (1) or not (0); this is required for training bert-large or larger models; do not use this together with apex fp16')
     ap.add_argument('--gpu',type=int,default=1,help='use gpu (1) or not (0)')
@@ -111,7 +111,7 @@ def parse_args():
     ap.add_argument('-tm','--trained_model',type=str,default='None',help='path to the trained model; make sure the trained model is consistent with the model you want to train')
     ap.add_argument('-mg','--max_grad_norm',type=float,default=1.,help='maximum gradient norm')
     ap.add_argument('-wp','--warmup_percent',type=float,default=0.2,help='how many percentage of steps are used for warmup')
-    ap.add_argument('-bt','--bert_type',type=str,default='bert-base',help='transformer (bert) pre-trained model you want to use', choices=['bert-base','bert-large','albert-base-v2','albert-large-v2','albert-xxlarge-v2'])
+    ap.add_argument('-bt','--bert_type',type=str,default='bert-base',help='transformer (bert) pre-trained model you want to use', choices=['bert-base','bert-large','albert-base-v2','albert-large-v2','albert-xxlarge-v2','roberta-base',"roberta-large"])
     ap.add_argument('--hans',type=int,default=0,help='use hans data (1) or not (0)')
     ap.add_argument('-rl','--reinit_layers',type=int,default=0,help='reinitialise the last N layers')
     ap.add_argument('-fl','--freeze_layers',type=int,default=0,help='whether to freeze all but the lasat few layers (1) or not (0)')
@@ -152,10 +152,10 @@ if __name__ == '__main__':
     print('model save path', model_save_path)
 
     #### Just some code to print debug information to stdout
-    logging.basicConfig(format='%(asctime)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S',
-                    level=logging.INFO,
-                    handlers=[LoggingHandler()])
+    #logging.basicConfig(format='%(asctime)s - %(message)s',
+    #                datefmt='%Y-%m-%d %H:%M:%S',
+    #                level=print,
+    #                handlers=[LoggingHandler()])
     #### /print debug information to stdout
 
     # Read the dataset
@@ -175,8 +175,8 @@ if __name__ == '__main__':
     train_data = all_data[:train_num]
     dev_data = all_data[train_num:]
 
-    logging.info('train data size {}'.format(len(train_data)))
-    logging.info('dev data size {}'.format(len(dev_data)))
+    print('train data size {}'.format(len(train_data)))
+    print('dev data size {}'.format(len(dev_data)))
 
     total_steps = math.ceil(epoch_num*len(train_data)*1./batch_size)
     warmup_steps = int(total_steps*warmup_percent)
@@ -184,6 +184,7 @@ if __name__ == '__main__':
     print(bert_type)
     model = BertNLIModel(gpu=gpu,batch_size=batch_size,bert_type=bert_type,model_path=trained_model, reinit_num=reinit_layers, freeze_layers=freeze_layers)
     optimizer = AdamW(model.parameters(),lr=2e-5,eps=1e-6,correct_bias=False)
+    #print(list(model.parameters()))
     scheduler = get_scheduler(optimizer, scheduler_setting, warmup_steps=warmup_steps, t_total=total_steps)
     if fp16:
         try:
@@ -195,7 +196,7 @@ if __name__ == '__main__':
     best_acc = -1.
     best_model_dic = None
     for ep in range(epoch_num):
-        logging.info('\n=====epoch {}/{}====='.format(ep,epoch_num))
+        print('\n=====epoch {}/{}====='.format(ep,epoch_num))
         model_dic = train(model, optimizer, scheduler, train_data, dev_data, batch_size, fp16, checkpoint, gpu, max_grad_norm, best_acc)
         if model_dic is not None:
             best_model_dic = model_dic
@@ -203,7 +204,7 @@ if __name__ == '__main__':
 
     # for testing load the best model
     model.load_model(best_model_dic)
-    logging.info('\n=====Training finished. Now start test=====')
+    print('\n=====Training finished. Now start test=====')
 
     if hans:
         nli_reader = NLIDataReader('datasets/Hans')
@@ -216,9 +217,9 @@ if __name__ == '__main__':
 
     test_data = msnli_test_data + hans_test_data
 
-    logging.info('test data size: {}'.format(len(test_data)))
+    print('test data size: {}'.format(len(test_data)))
     test_acc = evaluate(model,test_data,batch_size)
-    logging.info('accuracy on test set: {}'.format(test_acc))
+    print('accuracy on test set: {}'.format(test_acc))
 
     if model_save_path is not None:
         os.makedirs(model_save_path, exist_ok=True)
